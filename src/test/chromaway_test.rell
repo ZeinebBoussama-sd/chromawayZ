@@ -1,0 +1,76 @@
+@test module;
+
+import main.*;
+
+val admin= rell.test.keypair(
+    priv = x"D8AE5E493ABC16E97BD7187ECC4F59AC8471E31FEC1E8C564B99A64E4D20575B",
+    pub = x"02B4E3088E2A0C6A8B999019AC7F2D1D85A26D2C1E095AD8BAAA8AAE93F3E4B6BD"
+);
+
+function test_add_student() {
+    rell.test.tx()
+        .op(create_student("1", "Zeineb"))
+        .op(create_student("2", "Sadok"))
+        .sign(admin)
+        .run();
+
+    val all_students = student @* { };
+    assert_equals(all_students.size(), 2);
+    assert_equals(all_students[0].name, "Zeineb");
+}
+
+function test_add_course() {
+    rell.test.tx()
+        .op(create_course("Svenska", 40))
+        .op(create_course("Engleska", 20))
+        .sign(admin)
+        .run();
+
+    val all_courses = course @* { };
+
+    assert_equals(all_courses.size(), 2);
+    assert_equals(all_courses[0].title, "Svenska");
+}
+
+function test_add_student_course() {
+    rell.test.tx()
+        .op(create_student("11", "Zeineb"))
+        .op(create_student("12", "sad"))
+        .op(create_student("1", "zai"))
+        .op(create_course("Svenska", 1))
+        .sign(admin)
+        .op(enroll_student_in_course("12", "Svenska"))
+        .op(enroll_student_in_course("11", "Svenska"))
+        .op(enroll_student_in_course("1", "Svenska"))
+        .run();
+
+    val all_students_courses = student_at_course @* { .state == false };
+    print("cap_false", all_students_courses.size());
+
+    val studentt = student @ { .id == "11" };
+    print("name:", studentt.name);
+
+    val course = course @ { .title == "Svenska" };
+    assert_equals(all_students_courses.size(), 2);
+    
+}
+
+function test_delete_student_course() {
+    rell.test.tx()
+        .op(create_student("11", "Zeineb"))
+        .op(create_student("12", "sad"))
+        .op(create_student("1", "zai"))
+        .op(create_course("Svenska", 1))
+        .sign(admin)
+        .op(enroll_student_in_course("12", "Svenska"))
+        .op(enroll_student_in_course("11", "Svenska"))
+        .op(enroll_student_in_course("1", "Svenska"))
+        
+        .op(drop_student_from_course("12", "Svenska"))//remove student 12=sad from the course roster and enroll one student from the waitlist
+        
+        .run();
+        
+    val all_students_courses = student_at_course @* { .state == true };
+    assert_equals(all_students_courses.size(), 1); // verify that a new student has been successfully enrolled in the course.
+}
+

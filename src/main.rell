@@ -1,0 +1,142 @@
+module;
+
+struct module_args {
+    admin_pubkey: byte_array;
+}
+// define student
+
+entity student {
+    key id: text;
+    name: text;
+}
+// define course
+
+entity course {
+    key title: text;
+    capacity: integer;
+}
+// define the middle_table between student and course
+
+entity student_at_course {
+    key course, student;
+    mutable state: boolean;
+}
+
+operation create_student(id: text, name: text) {
+    //verify the signature of the administrator
+    val adminPubkey = chain_context.args.admin_pubkey;
+    require(
+        op_context
+            .is_signer(
+                adminPubkey
+            ),
+        "Only admin can create students"
+    ); 
+    // creation of the student
+    create student (
+        .id = id,
+        .name = name
+    );
+    
+}
+
+operation create_course(title: text, capacity: integer) {
+    //verify the signature of the administrator
+    val adminPubkey = chain_context.args.admin_pubkey;
+    require(
+        op_context
+            .is_signer(
+                adminPubkey
+            ),
+        "Only admin can create courses"
+    );
+     // creation of the course
+    create course (
+        .title = title,
+        .capacity = capacity
+    );
+   
+}
+
+operation enroll_student_in_course(student_id: text, course_title: text) {
+
+    val adminPubkey = chain_context.args.admin_pubkey;
+    require(op_context.is_signer(adminPubkey), "Only admin can put a student in a course");
+    val studentt = student @ { .id == student_id };
+    val coursee = course @ { .title == course_title };
+    val courseAtStuden = student_at_course @* {
+        .course == coursee,
+        .state == true
+    };
+    val state = (courseAtStuden.size()<coursee.capacity); // true or false
+
+    //enroll a specific student in the coursee
+    //State '0' if the current enrollment is less than the course capacity
+    create student_at_course (
+        .course = coursee,
+        .student = studentt,
+        .state = state
+    );
+
+}
+
+operation drop_student_from_course(student_id: text, course_title: text) {
+
+    val adminPubkey = chain_context.args.admin_pubkey;
+    require(op_context.is_signer(adminPubkey), "Only admin can drop student from a course");
+    val student = student @ { .id == student_id };
+    val course = course @ { .title == course_title };
+    //create wait list
+    val waitList = student_at_course @* {
+        .course == course,
+        .state == false 
+    }; 
+
+    for (u in waitList) {
+        print("courseAtStuden:", u.student.name);
+    }
+
+    //delete student from a specific course
+    delete student_at_course @ { .course == course, .student == student };
+    //Transfer another student from the waitlist to this course, ensuring it's for the same course, and update their enrollment status
+    update student_at_course @ { .student == waitList[0].student, .course == course } ( state = true ); 
+    print("s_after", waitList[0].state);
+}
+
+query get_all_students() {
+    return student @* { } (
+        .id,
+        .name
+    );
+}
+
+query get_all_courses() {
+    return course @* { } (
+        .title,
+        .capacity
+    );
+}
+
+query get_all_students_in_courses() {
+    return student_at_course @* { } (
+        .course.title,
+        .student.name,
+        .state
+    );
+}
+// How many students are enrolled in a specific course
+query get_students_by_course(course_title: text) {
+    val coursee = course @ { .title == course_title };
+    return student_at_course @* {
+        .course == coursee,
+        .state == true
+    } ( .state ).size();
+}
+// Which courses a specific student is enrolled in
+query get_courses_by_student(student_id: text) {
+    val student = student @ { .id == student_id };
+    return student_at_course @* {
+        .student == student
+    } ( .course.title );
+}
+
